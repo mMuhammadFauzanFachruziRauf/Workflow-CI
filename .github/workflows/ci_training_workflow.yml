@@ -2,82 +2,72 @@ name: ML Model CI Training
 
 on:
   push:
-    branches: [ main ] # Trigger saat ada push ke branch main
+    branches: [ main ]
   pull_request:
-    branches: [ main ] # Trigger juga saat ada pull request ke branch main
-  workflow_dispatch: # Memungkinkan menjalankan workflow secara manual
+    branches: [ main ]
+  workflow_dispatch:
 
 jobs:
   train-model:
-    runs-on: ubuntu-latest # Menggunakan runner Ubuntu terbaru
+    runs-on: ubuntu-latest
+
+    defaults: # Menetapkan direktori kerja default untuk semua langkah
+      run:
+        working-directory: ${{ github.workspace }} # Biasanya ini root repo Anda
 
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v4 # Versi terbaru dari actions/checkout
+      uses: actions/checkout@v4
 
-    - name: Set up Python
-      uses: actions/setup-python@v4 # Versi terbaru
+    - name: Set up Python # Untuk MLflow CLI di base atau jika diperlukan sebelum Conda
+      uses: actions/setup-python@v4
       with:
-        python-version: '3.9' # Sesuaikan dengan versi Python di conda.yaml Anda
+        python-version: '3.9' # Versi Python yang umum
 
-    - name: Set up Conda environment
-      uses: conda-incubator/setup-miniconda@v3 # Menggunakan action untuk setup Miniconda
+    - name: Set up Miniconda
+      uses: conda-incubator/setup-miniconda@v3
       with:
         auto-update-conda: true
-        python-version: '3.9' # Sesuaikan lagi
-        # mamba-version: "*" # Opsional, bisa mempercepat pembuatan environment
-        # channels: conda-forge,defaults # Opsional, jika diperlukan channel khusus
-        activate-environment: bitcoin_price_prediction_env # Nama env dari conda.yaml
-        environment-file: MLProject_training/conda.yaml # Path ke conda.yaml Anda
-        use-mamba: false # Set ke true jika ingin menggunakan Mamba
+        python-version: '3.9' # Sesuaikan dengan versi Python di conda.yaml Anda
+        # environment-file: MLProject_training/conda.yaml # Kita akan biarkan mlflow run yang handle ini
+        # activate-environment: bitcoin_price_prediction_env # Tidak perlu diaktifkan di sini
+        # Jika activate-environment di-set, pastikan nama env ada di conda.yaml
+        # Biarkan mlflow run yang membuat/mengaktifkan environment dari conda.yaml di dalam MLProject
+        channels: conda-forge,defaults # Pastikan channel ini sesuai dengan conda.yaml Anda
+        use-mamba: false # Set ke true jika ingin menggunakan Mamba dan dependensi mendukung
 
-    - name: Install MLflow (di base atau environment aktif)
+    - name: Install MLflow CLI (di base environment Conda)
+      shell: bash -el {0} # Memastikan conda ada di path untuk shell ini
       run: |
-        # pip install mlflow  # Jika setup-miniconda tidak mengaktifkan env project secara otomatis
-        # Atau, jika env 'bitcoin_price_prediction_env' sudah aktif:
-        conda install -c conda-forge mlflow --name bitcoin_price_prediction_env --yes
-        # Atau pastikan MLflow ada di base env jika menjalankan dari sana
-        # Untuk memastikan mlflow CLI dikenali, kita bisa install di base yang dibuat setup-miniconda
-        # $CONDA/bin/conda install -c conda-forge mlflow --yes
+        # $CONDA adalah path ke instalasi miniconda yang dibuat oleh setup-miniconda
+        echo "CONDA executable is at: $CONDA/bin/conda"
+        $CONDA/bin/pip install mlflow # Menginstal mlflow di base env dari miniconda
+        echo "MLflow version:"
+        $CONDA/bin/mlflow --version
 
     - name: Run MLflow Project
+      shell: bash -el {0} # Memastikan conda dan mlflow dari base env ada di path
       env:
-        # Jika MLflow Tracking Server Anda memerlukan kredensial atau konfigurasi khusus,
-        # Anda bisa set environment variables di sini.
-        # Untuk MLflow lokal (mlruns), ini biasanya tidak diperlukan.
-        # MLFLOW_TRACKING_URI: ./mlruns # Opsional, defaultnya memang ini jika tidak di-set
-        # MLFLOW_CONDA_HOME: $CONDA # setup-miniconda biasanya mengatur ini
-        CONDA_EXE: ${{ env.CONDA_EXE }} # Memberitahu MLflow di mana conda executable berada
+        # MLFLOW_CONDA_HOME: $CONDA # setup-miniconda biasanya sudah mengatur ini, atau MLflow mendeteksinya
+        # CONDA_EXE: $CONDA/bin/conda # Bisa juga diset eksplisit jika perlu
+        # Menambahkan path bin dari Conda ke PATH untuk sesi run ini
+        PATH: ${{ env.CONDA }}/bin:${{ env.PATH }}
       run: |
-        echo "CONDA_EXE is set to: ${{ env.CONDA_EXE }}"
-        echo "CONDA_PREFIX is set to: ${{ env.CONDA_PREFIX }}"
-        # Pastikan mlflow bisa ditemukan, mungkin perlu path absolut jika tidak di PATH utama
-        # Cara paling aman adalah mengaktifkan env dan memanggil python -m mlflow
-        # Tapi karena 'mlflow run' akan membuat/mengaktifkan env dari conda.yaml,
-        # kita hanya perlu memastikan 'mlflow' CLI dikenali oleh runner utama.
-        # Atau kita bisa install MLflow di environment base dari miniconda.
-        # $CONDA/bin/pip install mlflow # Ini akan install di base miniconda action
+        echo "Verifying mlflow in PATH..."
+        which mlflow # Seharusnya menunjuk ke $CONDA/bin/mlflow
+        mlflow --version
 
-        # Jalankan MLflow run.
-        # MLflow akan menggunakan conda.yaml dari dalam MLProject_training untuk membuat env baru
-        # atau menggunakan yang sudah ada (mlflow-HASH)
-        # Pastikan MLflow CLI itu sendiri bisa diakses.
-        # Jika MLflow diinstal di env 'bitcoin_price_prediction_env', kita perlu menjalankannya dari sana
-        # Atau install MLflow di base env dari runner.
-        # Untuk kesederhanaan, kita coba langsung dengan asumsi MLflow CLI ada di path.
-        # Jika tidak, kita akan perlu mengaktifkan env atau menggunakan path absolut.
-        # Atau memastikan mlflow terinstall di base environment dari action setup-miniconda
-        # Mari kita coba install mlflow di base environment yang dibuat oleh setup-miniconda
-        $CONDA/bin/pip install mlflow
-        $CONDA/bin/mlflow run MLProject_training/ --experiment-name "CI Bitcoin Price Prediction"
+        echo "Running MLflow project..."
+        # Menjalankan mlflow run dari root repository, menunjuk ke folder MLProject
+        # MLflow akan membaca MLproject di dalam MLProject_training/
+        # dan menggunakan conda.yaml di dalam MLProject_training/ untuk membuat environment baru (mlflow-xxxx)
+        mlflow run MLProject_training/ --experiment-name "CI Bitcoin Price Prediction"
 
-    - name: Upload MLflow run artifacts (Opsional, jika ingin menyimpan artefak di GitHub Actions)
-      if: always() # Selalu jalankan langkah ini, bahkan jika langkah sebelumnya gagal (untuk debug)
+    - name: Upload MLflow run artifacts
+      if: always()
       uses: actions/upload-artifact@v4
       with:
         name: mlflow-run-artifacts
-        path: |
+        path: | # Path relatif dari root repository
           MLProject_training/mlruns/
-          # Anda bisa juga menambahkan path ke file model spesifik jika tahu lokasinya
-          # MLProject_training/artifacts/ (jika Anda menyimpan secara terpisah)
-        retention-days: 7 # Simpan artefak selama 7 hari
+        retention-days: 7
