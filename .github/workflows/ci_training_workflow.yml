@@ -24,8 +24,8 @@ jobs:
         sudo apt-get update -y
         sudo apt-get install -y git
         echo "Verifying git installation (system-wide):"
-        which git
-        git --version
+        ls -l /usr/bin/git # Cek keberadaan file
+        /usr/bin/git --version # Panggil dengan path absolut
 
     - name: Set up Python (untuk runner jika diperlukan sebelum Conda)
       uses: actions/setup-python@v4
@@ -36,15 +36,16 @@ jobs:
       uses: conda-incubator/setup-miniconda@v3
       with:
         auto-update-conda: true
-        python-version: '3.9'
-        channels: conda-forge,defaults # Pastikan ini sesuai dengan conda.yaml Anda
+        python-version: '3.9' # Ini versi Python untuk base env Miniconda
+        channels: conda-forge,defaults
         use-mamba: false
 
     - name: Install MLflow CLI and GitPython (di base environment Conda)
       run: |
         echo "CONDA executable is at: $CONDA/bin/conda"
         echo "Installing MLflow and GitPython in $CONDA/bin..."
-        $CONDA/bin/pip install mlflow GitPython
+        # Pastikan pip menggunakan versi python yang benar
+        $CONDA/bin/python -m pip install mlflow GitPython
         echo "MLflow version in Conda base:"
         $CONDA/bin/mlflow --version
         echo "GitPython version in Conda base:"
@@ -52,32 +53,18 @@ jobs:
 
     - name: Run MLflow Project
       env:
-        # Menambahkan path bin dari Conda ke PATH, tapi pastikan PATH sistem tetap ada
-        # $PATH di sini akan menjadi PATH yang sudah ada di runner sebelum Conda mengubahnya.
-        # Kita akan mengandalkan git yang sudah terinstal secara sistem dan ada di PATH sistem.
-        # $CONDA/bin akan ditambahkan ke PATH oleh aktivasi environment Conda oleh mlflow run.
-        # Jadi, kita tidak perlu memanipulasi PATH secara manual di sini jika git sistem sudah benar.
-        # Namun, jika MLflow CLI dari Conda base yang ingin kita gunakan, kita perlu pastikan $CONDA/bin ada di PATH.
-        PATH: ${{ env.CONDA }}/bin:${{ env.PATH }} # Tetap pertahankan ini untuk mlflow CLI dari Conda base
+        # Pastikan /usr/bin ada di PATH yang dilihat oleh semua proses
+        # $CONDA/bin juga penting untuk mlflow CLI itu sendiri
+        PATH: /usr/bin:${CONDA}/bin:${PATH}
+        GIT_PYTHON_GIT_EXECUTABLE: /usr/bin/git # Set secara eksplisit
+        # MLFLOW_CONDA_HOME: ${{ env.CONDA }} # Biasanya otomatis terdeteksi
       run: |
         echo "--- Verifying Environment ---"
         echo "Current PATH: $PATH"
         echo "CONDA env variable: $CONDA"
         
-        echo "Verifying system git command..."
-        # Mencoba path absolut jika 'git --version' gagal
-        if ! command -v git &> /dev/null
-        then
-            echo "git command not found in PATH, trying /usr/bin/git"
-            if [ -f /usr/bin/git ]; then
-                /usr/bin/git --version
-            else
-                echo "/usr/bin/git not found. Git is not properly installed or not in expected system PATH."
-                exit 1
-            fi
-        else
-            git --version # Seharusnya berhasil jika langkah instalasi git di atas sukses
-        fi
+        echo "Verifying system git command (using /usr/bin/git)..."
+        /usr/bin/git --version
         
         echo "Verifying conda command..."
         conda --version
@@ -85,12 +72,11 @@ jobs:
         echo "Verifying mlflow command (from Conda base)..."
         mlflow --version
         
-        echo "Running MLflow project..."
-        # Memberitahu GitPython secara eksplisit di mana menemukan git executable
-        # Ini akan di-set sebagai environment variable untuk proses python
-        export GIT_PYTHON_GIT_EXECUTABLE=$(command -v git || echo /usr/bin/git) 
         echo "GIT_PYTHON_GIT_EXECUTABLE is set to: $GIT_PYTHON_GIT_EXECUTABLE"
 
+        echo "Running MLflow project..."
+        # MLflow akan membuat environment baru berdasarkan conda.yaml (mlflow-xxxx)
+        # GitPython akan dijalankan di dalam environment tersebut.
         mlflow run MLProject_training/ --experiment-name "CI Bitcoin Price Prediction"
 
     - name: Upload MLflow run artifacts
