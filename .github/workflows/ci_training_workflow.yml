@@ -24,8 +24,8 @@ jobs:
         sudo apt-get update -y
         sudo apt-get install -y git
         echo "Verifying git installation (system-wide):"
-        ls -l /usr/bin/git # Cek keberadaan file
-        /usr/bin/git --version # Panggil dengan path absolut
+        ls -l /usr/bin/git
+        /usr/bin/git --version
 
     - name: Set up Python (untuk runner jika diperlukan sebelum Conda)
       uses: actions/setup-python@v4
@@ -33,50 +33,51 @@ jobs:
         python-version: '3.9'
 
     - name: Set up Miniconda
+      id: setup_conda # Memberikan ID pada langkah ini agar outputnya bisa direferensikan
       uses: conda-incubator/setup-miniconda@v3
       with:
         auto-update-conda: true
-        python-version: '3.9' # Ini versi Python untuk base env Miniconda
+        python-version: '3.9'
         channels: conda-forge,defaults
         use-mamba: false
 
     - name: Install MLflow CLI and GitPython (di base environment Conda)
       run: |
-        echo "CONDA executable is at: $CONDA/bin/conda"
-        echo "Installing MLflow and GitPython in $CONDA/bin..."
-        # Pastikan pip menggunakan versi python yang benar
-        $CONDA/bin/python -m pip install mlflow GitPython
+        # $CONDA adalah variabel env default yang disediakan oleh setup-miniconda
+        # atau kita bisa menggunakan output dari langkah setup_conda
+        echo "CONDA executable is at: ${{ steps.setup_conda.outputs.conda-exe }}"
+        echo "Installing MLflow and GitPython in Conda base..."
+        # Menggunakan python -m pip untuk memastikan instalasi ke env Conda base yang benar
+        ${{ steps.setup_conda.outputs.conda-prefix }}/bin/python -m pip install mlflow GitPython
         echo "MLflow version in Conda base:"
-        $CONDA/bin/mlflow --version
+        ${{ steps.setup_conda.outputs.conda-prefix }}/bin/mlflow --version
         echo "GitPython version in Conda base:"
-        $CONDA/bin/python -c "import git; print(git.__version__)"
+        ${{ steps.setup_conda.outputs.conda-prefix }}/bin/python -c "import git; print(git.__version__)"
 
     - name: Run MLflow Project
       env:
-        # Pastikan /usr/bin ada di PATH yang dilihat oleh semua proses
-        # $CONDA/bin juga penting untuk mlflow CLI itu sendiri
-        PATH: /usr/bin:${CONDA}/bin:${PATH}
-        GIT_PYTHON_GIT_EXECUTABLE: /usr/bin/git # Set secara eksplisit
-        # MLFLOW_CONDA_HOME: ${{ env.CONDA }} # Biasanya otomatis terdeteksi
+        # Menggunakan output dari langkah setup_conda untuk path yang benar
+        # dan menggabungkannya dengan PATH sistem yang sudah ada.
+        PATH: ${{ steps.setup_conda.outputs.conda-bin-path }}:${{ env.PATH }}
+        GIT_PYTHON_GIT_EXECUTABLE: /usr/bin/git # Path absolut ke git sistem
+        # MLFLOW_CONDA_HOME: ${{ steps.setup_conda.outputs.conda-prefix }} # Bisa juga di-set jika MLflow perlu
       run: |
         echo "--- Verifying Environment ---"
         echo "Current PATH: $PATH"
-        echo "CONDA env variable: $CONDA"
+        # CONDA env variable tidak lagi sepenting $CONDA/bin ada di PATH
         
         echo "Verifying system git command (using /usr/bin/git)..."
         /usr/bin/git --version
         
-        echo "Verifying conda command..."
-        conda --version
+        echo "Verifying conda command (from PATH)..."
+        conda --version # Seharusnya ditemukan karena ${{ steps.setup_conda.outputs.conda-bin-path }}
         
-        echo "Verifying mlflow command (from Conda base)..."
-        mlflow --version
+        echo "Verifying mlflow command (from Conda base, now in PATH)..."
+        mlflow --version # Seharusnya ditemukan
         
         echo "GIT_PYTHON_GIT_EXECUTABLE is set to: $GIT_PYTHON_GIT_EXECUTABLE"
 
         echo "Running MLflow project..."
-        # MLflow akan membuat environment baru berdasarkan conda.yaml (mlflow-xxxx)
-        # GitPython akan dijalankan di dalam environment tersebut.
         mlflow run MLProject_training/ --experiment-name "CI Bitcoin Price Prediction"
 
     - name: Upload MLflow run artifacts
