@@ -43,12 +43,12 @@ jobs:
         echo "--- Verifying Conda Setup for MLflow Installation ---"
         echo "PATH: $PATH"
         echo "CONDA_PREFIX: $CONDA_PREFIX"
-        echo "Which conda: $(which conda)" # Substitusi perintah shell
+        echo "Which conda: $(which conda)"
         conda info --envs
-        echo "Which python: $(which python)" # Substitusi perintah shell
+        echo "Which python: $(which python)"
         python --version
-        echo "Which pip: $(which pip)" # Substitusi perintah shell
-        pip --version # Perintah terpisah
+        echo "Which pip: $(which pip)"
+        pip --version
         echo "Installing MLflow (specific version) and GitPython using pip from active Conda env..."
         python -m pip install "mlflow>=2.0.0,<3.0.0" GitPython
         echo "Verifying MLflow version (running as module)..."
@@ -74,10 +74,13 @@ jobs:
         python -m mlflow run MLProject_training/ --experiment-name "$EXPERIMENT_NAME_FOR_PYTHON"
         
         echo "Fetching latest Run ID using Python API..."
+        # Pastikan skrip Python di bawah ini dimulai pada baris baru setelah -c "
+        # dan semua indentasi Python di dalamnya konsisten.
         LATEST_RUN_ID=$(python -c "
 import mlflow
 import os
 
+# Kode Python dimulai di sini. Indentasi Python standar.
 tracking_uri_py = os.environ.get('MLFLOW_TRACKING_URI')
 if tracking_uri_py:
     mlflow.set_tracking_uri(tracking_uri_py)
@@ -107,7 +110,7 @@ try:
         exit(1)
     
     latest_run_id_py = runs_df.iloc[0]['run_id']
-    print(latest_run_id_py)
+    print(latest_run_id_py) # Ini akan ditangkap oleh LATEST_RUN_ID di bash
 
 except Exception as e:
     print(f'Python script execution error: {e}')
