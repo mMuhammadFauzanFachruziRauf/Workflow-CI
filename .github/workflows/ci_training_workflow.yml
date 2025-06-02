@@ -13,7 +13,8 @@ jobs:
 
     defaults:
       run:
-        shell: bash -el {0}
+        # shell: bash -el {0} # Kita akan coba tanpa -l untuk sementara, hanya bash -e
+        shell: bash -e {0} # -e akan membuat skrip keluar jika ada error
 
     steps:
     - name: Checkout repository
@@ -22,7 +23,7 @@ jobs:
     - name: Install git and jq (system-wide)
       run: |
         sudo apt-get update -y
-        sudo apt-get install -y git jq # jq untuk parsing JSON
+        sudo apt-get install -y git jq
         echo "Verifying git installation (system-wide):"
         /usr/bin/git --version
         echo "Verifying jq installation (system-wide):"
@@ -35,57 +36,68 @@ jobs:
         auto-update-conda: true
         python-version: '3.9'
         channels: conda-forge,defaults
+        # mamba-version: "*" # Opsional
+        # architecture: x64 # Default
+        # conda-prefix: ${{ runner.temp }}/miniconda # Opsional, path kustom
+        # activate-environment: my-env # Opsional, jika ingin mengaktifkan env tertentu
+        auto-activate-base: true # Pastikan base env aktif
         use-mamba: false
 
-    - name: Install MLflow CLI and GitPython (di base environment Conda)
+    - name: Initialize Conda for shell and Install MLflow & GitPython
+      # Menggunakan output dari setup_conda untuk memastikan kita menggunakan conda yang benar
+      # CONDA_EXE adalah path ke conda executable.
+      # CONDA_PREFIX_1 adalah path ke base environment.
       run: |
-        echo "--- Verifying Conda Setup for MLflow Installation ---"
+        echo "--- Initializing Conda for Shell and Installing Packages ---"
+        source "${{ steps.setup_conda.outputs.conda-prefix }}/etc/profile.d/conda.sh" # Inisialisasi Conda untuk BASH
+        conda activate base # Pastikan base aktif setelah sourcing
+        
         echo "PATH: $PATH"
         echo "Which conda: $(which conda)"
         conda info --envs
+        
         echo "Which python: $(which python)"
         python --version
+        
         echo "Which pip: $(which pip)"
         pip --version
+
         echo "Installing MLflow and GitPython using pip from active Conda env..."
-        python -m pip install mlflow GitPython
+        pip install mlflow GitPython
+        
         echo "Verifying MLflow version (running as module)..."
         python -m mlflow --version
+        
         echo "Verifying GitPython version..."
         python -c "import git; print(f'GitPython version: {git.__version__}')"
 
-    - name: Run MLflow Project and Capture Run ID
-      id: mlflow_run_step # Memberi ID pada langkah ini
+    - name: Run MLflow Project
+      # PATH dan GIT_PYTHON_GIT_EXECUTABLE akan diwarisi jika di-set di env job atau workflow
+      # Namun, inisialisasi conda di atas seharusnya sudah mengatur PATH dengan benar
       env:
-        PATH: ${{ env.PATH }} # PATH dari sistem akan digabungkan dengan yang diset Conda
-        GIT_PYTHON_GIT_EXECUTABLE: /usr/bin/git
+        GIT_PYTHON_GIT_EXECUTABLE: /usr/bin/git # Path absolut ke git sistem
+        # MLFLOW_CONDA_HOME: ${{ steps.setup_conda.outputs.conda-prefix }} # Bisa ditambahkan jika perlu
       run: |
         echo "--- Verifying Environment for MLflow Run ---"
-        echo "Current PATH: $PATH" # Akan menyertakan Conda base bin dari aktivasi
-        echo "Which python: $(which python)"
+        echo "Current PATH: $PATH"
+        echo "Which python: $(which python)" # Seharusnya python dari Conda base
         python --version
         
-        EXPERIMENT_NAME_CI="CI Bitcoin Price Prediction" # Nama Eksperimen
+        EXPERIMENT_NAME_CI="CI Bitcoin Price Prediction"
         echo "Running MLflow project for experiment: $EXPERIMENT_NAME_CI"
-        # Jalankan MLflow run
-        # Output dari mlflow run akan otomatis masuk ke log, tidak perlu tee jika tidak ada parsing kompleks
+        
+        # Menjalankan mlflow run sebagai modul Python dari Conda base
         python -m mlflow run MLProject_training/ --experiment-name "$EXPERIMENT_NAME_CI"
         
-        # Setelah mlflow run selesai, dapatkan run ID terbaru dari eksperimen tersebut
+        # (Logika untuk mendapatkan LATEST_RUN_ID tetap sama)
         echo "Fetching latest Run ID from experiment '$EXPERIMENT_NAME_CI'..."
-        # Menggunakan mlflow runs list dengan --experiment-name dan mengambil run_id dari entri pertama (terbaru)
         LATEST_RUN_ID=$(python -m mlflow runs list --experiment-name "$EXPERIMENT_NAME_CI" --output-format json | jq -r '.[0].info.run_id')
-        
         if [ -z "$LATEST_RUN_ID" ] || [ "$LATEST_RUN_ID" == "null" ]; then
-          echo "Error: Could not find latest Run ID for experiment '$EXPERIMENT_NAME_CI'. Listing experiments and runs:"
-          echo "Experiments:"
-          python -m mlflow experiments list
-          echo "Runs in default experiment:"
-          python -m mlflow runs list --experiment-id 0 # Cek default experiment (ID 0)
+          echo "Error: Could not find latest Run ID for experiment '$EXPERIMENT_NAME_CI'."
           exit 1
         fi
         echo "Latest Run ID is: $LATEST_RUN_ID"
-        echo "run_id=$LATEST_RUN_ID" >> $GITHUB_OUTPUT # Menyimpan Run ID sebagai output langkah
+        echo "run_id=$LATEST_RUN_ID" >> $GITHUB_OUTPUT
 
     - name: Log in to Docker Hub
       if: success()
@@ -97,12 +109,26 @@ jobs:
     - name: Build and Push Docker image using MLflow
       if: success()
       env:
-        # PATH akan diwarisi, python dan mlflow (sebagai modul) seharusnya tersedia
         GIT_PYTHON_GIT_EXECUTABLE: /usr/bin/git
       run: |
-        RUN_ID="${{ steps.mlflow_run_step.outputs.run_id }}"
+        RUN_ID="${{ steps.mlflow_run_step.outputs.run_id }}" # Perlu ID untuk langkah Run MLflow Project
+        # Jika langkah "Run MLflow Project" tidak diberi id: mlflow_run_step, ini akan gagal
+        # Mari kita asumsikan langkah "Run MLflow Project" di atas akan kita beri id: mlflow_run_step
+        # Jika tidak, kita gunakan cara sementara lagi:
         if [ -z "$RUN_ID" ]; then
-          echo "Error: Could not determine Run ID from previous step."
+            echo "RUN_ID not directly available from step output, fetching again..."
+            EXPERIMENT_NAME_CI="CI Bitcoin Price Prediction"
+            LATEST_RUN_ID_BUILD=$(python -m mlflow runs list --experiment-name "$EXPERIMENT_NAME_CI" --output-format json | jq -r '.[0].info.run_id')
+            if [ -z "$LATEST_RUN_ID_BUILD" ] || [ "$LATEST_RUN_ID_BUILD" == "null" ]; then
+                echo "Error: Could not find latest Run ID for experiment '$EXPERIMENT_NAME_CI' in build step."
+                exit 1
+            fi
+            RUN_ID="$LATEST_RUN_ID_BUILD"
+            echo "Determined Run ID for build: $RUN_ID"
+        fi
+
+        if [ -z "$RUN_ID" ]; then
+          echo "Error: Could not determine Run ID."
           exit 1
         fi
         echo "Using Run ID: $RUN_ID untuk membangun Docker image."
