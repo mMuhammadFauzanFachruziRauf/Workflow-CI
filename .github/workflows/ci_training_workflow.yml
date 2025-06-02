@@ -35,7 +35,7 @@ jobs:
         auto-update-conda: true
         python-version: '3.9'
         channels: conda-forge,defaults
-        auto-activate-base: true # Default, memastikan base env aktif
+        auto-activate-base: true
         use-mamba: false
 
     - name: Install MLflow CLI and GitPython in Conda base
@@ -71,14 +71,14 @@ jobs:
         
         python -m mlflow run MLProject_training/ --experiment-name "$EXPERIMENT_NAME_CI"
         
-        # Setelah mlflow run selesai, dapatkan experiment ID terlebih dahulu
+        # Setelah mlflow run selesai, dapatkan experiment ID
         echo "Fetching Experiment ID for '$EXPERIMENT_NAME_CI'..."
-        # Menggunakan mlflow experiments search, yang lebih standar untuk mendapatkan info eksperimen by name
-        EXPERIMENT_ID=$(python -m mlflow experiments search --query "name='$EXPERIMENT_NAME_CI'" --output-format json | jq -r '.[0].experiment_id')
+        # Menggunakan mlflow experiments list dan menyaring dengan jq
+        EXPERIMENT_ID=$(python -m mlflow experiments list --output-format json | jq -r --arg E_NAME "$EXPERIMENT_NAME_CI" '.[] | select(.name == $E_NAME) | .experiment_id')
         
         if [ -z "$EXPERIMENT_ID" ] || [ "$EXPERIMENT_ID" == "null" ]; then
           echo "Error: Could not find Experiment ID for '$EXPERIMENT_NAME_CI'. Listing all experiments:"
-          python -m mlflow experiments list # 'list' adalah sub-command yang valid untuk 'experiments'
+          python -m mlflow experiments list
           exit 1
         fi
         echo "Experiment ID for '$EXPERIMENT_NAME_CI' is: $EXPERIMENT_ID"
