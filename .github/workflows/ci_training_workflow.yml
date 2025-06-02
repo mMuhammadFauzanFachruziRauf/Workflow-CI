@@ -74,10 +74,14 @@ jobs:
         # Setelah mlflow run selesai, dapatkan experiment ID
         echo "Fetching Experiment ID for '$EXPERIMENT_NAME_CI'..."
         # Menggunakan mlflow experiments list dan menyaring dengan jq
-        EXPERIMENT_ID=$(python -m mlflow experiments list --output-format json | jq -r --arg E_NAME "$EXPERIMENT_NAME_CI" '.[] | select(.name == $E_NAME) | .experiment_id')
+        # 'mlflow experiments list' akan menghasilkan output yang mungkin perlu disesuaikan parsingnya
+        # Asumsi outputnya adalah array JSON dari objek eksperimen
+        EXPERIMENT_ID=$(python -m mlflow experiments list --output-format json | jq -r --arg E_NAME "$EXPERIMENT_NAME_CI" '.experiments[] | select(.name == $E_NAME) | .experiment_id')
         
         if [ -z "$EXPERIMENT_ID" ] || [ "$EXPERIMENT_ID" == "null" ]; then
-          echo "Error: Could not find Experiment ID for '$EXPERIMENT_NAME_CI'. Listing all experiments:"
+          echo "Error: Could not find Experiment ID for '$EXPERIMENT_NAME_CI'. Listing all experiments (raw output):"
+          python -m mlflow experiments list --output-format json # Cetak output JSON mentah untuk debugging
+          # Mungkin juga coba tanpa --output-format json untuk melihat output default
           python -m mlflow experiments list
           exit 1
         fi
@@ -85,10 +89,13 @@ jobs:
         
         # Dapatkan run ID terbaru dari eksperimen tersebut menggunakan experiment_id
         echo "Fetching latest Run ID from Experiment ID $EXPERIMENT_ID..."
+        # Asumsi outputnya adalah array JSON dari objek run
         LATEST_RUN_ID=$(python -m mlflow runs list --experiment-id "$EXPERIMENT_ID" --output-format json | jq -r '.[0].info.run_id')
         
         if [ -z "$LATEST_RUN_ID" ] || [ "$LATEST_RUN_ID" == "null" ]; then
-          echo "Error: Could not find latest Run ID for Experiment ID $EXPERIMENT_ID. Listing runs for this experiment:"
+          echo "Error: Could not find latest Run ID for Experiment ID $EXPERIMENT_ID. Listing runs for this experiment (raw output):"
+          python -m mlflow runs list --experiment-id "$EXPERIMENT_ID" --output-format json # Cetak output JSON mentah
+          # Mungkin juga coba tanpa --output-format json
           python -m mlflow runs list --experiment-id "$EXPERIMENT_ID"
           exit 1
         fi
