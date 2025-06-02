@@ -33,8 +33,8 @@ jobs:
       uses: conda-incubator/setup-miniconda@v3
       with:
         auto-update-conda: true
-        python-version: '3.9' # Versi Python untuk base env Miniconda
-        channels: conda-forge,defaults # conda-forge sering memiliki versi terbaru
+        python-version: '3.9'
+        channels: conda-forge,defaults
         auto-activate-base: true
         use-mamba: false
 
@@ -50,7 +50,7 @@ jobs:
         echo "Which pip: $(which pip)"
         pip --version
         echo "Installing MLflow (specific version) and GitPython using pip from active Conda env..."
-        # Menginstal versi MLflow yang diketahui stabil dan mendukung fitur yang kita butuhkan
+        # Menginstal versi MLflow yang diketahui stabil.
         python -m pip install "mlflow>=2.0.0,<3.0.0" GitPython
         
         echo "Verifying MLflow version (running as module)..."
@@ -75,17 +75,30 @@ jobs:
         # Jalankan MLflow run. Ini akan membuat eksperimen jika belum ada.
         python -m mlflow run MLProject_training/ --experiment-name "$EXPERIMENT_NAME_CI"
         
-        # Setelah mlflow run selesai, dapatkan run ID terbaru dari eksperimen tersebut
-        echo "Fetching latest Run ID from experiment '$EXPERIMENT_NAME_CI'..."
-        # Menggunakan mlflow search runs, yang lebih stabil untuk mendapatkan run dari sebuah eksperimen
-        # Kita urutkan berdasarkan start_time descending dan ambil yang pertama
-        LATEST_RUN_ID=$(python -m mlflow search runs --experiment-names "$EXPERIMENT_NAME_CI" --output-format json --order-by "attributes.start_time DESC" --max-results 1 | jq -r '.[0].info.run_id')
+        # Setelah mlflow run selesai, dapatkan experiment ID terlebih dahulu
+        echo "Fetching Experiment ID for '$EXPERIMENT_NAME_CI'..."
+        # Mencoba kembali 'mlflow experiments list' karena 'search' bukan perintah utama mlflow
+        EXPERIMENT_ID=$(python -m mlflow experiments list --output-format json | jq -r --arg E_NAME "$EXPERIMENT_NAME_CI" '.experiments[] | select(.name == $E_NAME) | .experiment_id')
+        
+        if [ -z "$EXPERIMENT_ID" ] || [ "$EXPERIMENT_ID" == "null" ]; then
+          echo "Error: Could not find Experiment ID for '$EXPERIMENT_NAME_CI'. Listing all experiments (raw JSON output):"
+          python -m mlflow experiments list --output-format json # Cetak output JSON mentah untuk debugging
+          echo "Listing all experiments (default output):"
+          python -m mlflow experiments list
+          exit 1
+        fi
+        echo "Experiment ID for '$EXPERIMENT_NAME_CI' is: $EXPERIMENT_ID"
+        
+        # Dapatkan run ID terbaru dari eksperimen tersebut menggunakan experiment_id
+        echo "Fetching latest Run ID from Experiment ID $EXPERIMENT_ID..."
+        # Menggunakan mlflow runs list dengan --experiment-id
+        LATEST_RUN_ID=$(python -m mlflow runs list --experiment-id "$EXPERIMENT_ID" --output-format json | jq -r '.[0].info.run_id')
         
         if [ -z "$LATEST_RUN_ID" ] || [ "$LATEST_RUN_ID" == "null" ]; then
-          echo "Error: Could not find latest Run ID for experiment '$EXPERIMENT_NAME_CI'. Listing experiments:"
-          python -m mlflow experiments list # Untuk melihat apakah eksperimen dibuat
-          echo "Listing runs for default experiment (ID 0) as a fallback debug:"
-          python -m mlflow runs list --experiment-id 0
+          echo "Error: Could not find latest Run ID for Experiment ID $EXPERIMENT_ID. Listing runs for this experiment (raw JSON output):"
+          python -m mlflow runs list --experiment-id "$EXPERIMENT_ID" --output-format json
+          echo "Listing runs for this experiment (default output):"
+          python -m mlflow runs list --experiment-id "$EXPERIMENT_ID"
           exit 1
         fi
         echo "Latest Run ID is: $LATEST_RUN_ID"
