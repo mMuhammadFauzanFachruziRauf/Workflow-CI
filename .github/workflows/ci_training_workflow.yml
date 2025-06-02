@@ -73,7 +73,7 @@ jobs:
 
     - name: Upload MLflow run artifacts (Opsional, jika ingin menyimpan artefak di GitHub Actions)
       if: always() # Selalu jalankan langkah ini, bahkan jika langkah sebelumnya gagal (untuk debug)
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: mlflow-run-artifacts
         path: |
