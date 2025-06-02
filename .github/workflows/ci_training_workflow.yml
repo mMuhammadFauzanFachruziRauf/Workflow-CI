@@ -47,61 +47,83 @@ jobs:
         conda info --envs
         echo "Which python: $(which python)"
         python --version
-        echo "Which pip: $(which pip)"
-        pip --version
-        echo "Installing MLflow (specific version) and GitPython using pip from active Conda env..."
-        python -m pip install "mlflow>=2.0.0,<3.0.0" GitPython
-        echo "Verifying MLflow version (running as module)..."
-        python -m mlflow --version
-        echo "Verifying GitPython version..."
-        python -c "import git; print(f'GitPython version: {git.__version__}')"
-
-    - name: Run MLflow Project and Capture Run ID
-      id: mlflow_run_step
-      env:
-        GIT_PYTHON_GIT_EXECUTABLE: /usr/bin/git
-        # Set MLFLOW_TRACKING_URI agar skrip Python API bisa menemukan mlruns dengan benar
-        MLFLOW_TRACKING_URI: "file://$(pwd)/MLProject_training/mlruns"
+        echo "Which pip: <span class="math-inline">\(which pip\)"
+pip \-\-version
+echo "Installing MLflow \(specific version\) and GitPython using pip from active Conda env\.\.\."
+python \-m pip install "mlflow\>\=2\.0\.0,<3\.0\.0" GitPython
+echo "Verifying MLflow version \(running as module\)\.\.\."
+python \-m mlflow \-\-version
+echo "Verifying GitPython version\.\.\."
+python \-c "import git; print\(f'GitPython version\: \{git\.\_\_version\_\_\}'\)"
+\- name\: Run MLflow Project and Capture Run ID
+id\: mlflow\_run\_step
+env\:
+GIT\_PYTHON\_GIT\_EXECUTABLE\: /usr/bin/git
+MLFLOW\_TRACKING\_URI\: "file\://</span>{{ github.workspace }}/MLProject_training/mlruns" # Menggunakan GITHUB_WORKSPACE
+        EXPERIMENT_NAME_FOR_PYTHON: "CI Bitcoin Price Prediction" # Variabel env baru untuk Python
       run: |
         echo "--- Verifying Environment for MLflow Run ---"
         echo "Current PATH: $PATH"
         echo "Which python: $(which python)"
         python --version
         
-        EXPERIMENT_NAME_CI="CI Bitcoin Price Prediction"
-        echo "Running MLflow project for experiment: $EXPERIMENT_NAME_CI"
+        # EXPERIMENT_NAME_CI sudah diset di env sebagai EXPERIMENT_NAME_FOR_PYTHON
+        echo "Running MLflow project for experiment: $EXPERIMENT_NAME_FOR_PYTHON"
         echo "MLFLOW_TRACKING_URI for run: $MLFLOW_TRACKING_URI"
         
-        # Jalankan MLflow run. Ini akan membuat eksperimen jika belum ada.
-        python -m mlflow run MLProject_training/ --experiment-name "$EXPERIMENT_NAME_CI"
-        
-        # Setelah mlflow run selesai, dapatkan run ID terbaru menggunakan Python API MLflow
-        echo "Fetching latest Run ID using Python API..."
-        LATEST_RUN_ID=$(python -c "
+        python -m mlflow run MLProject_training/ --experiment-name "<span class="math-inline">EXPERIMENT\_NAME\_FOR\_PYTHON"
+echo "Fetching latest Run ID using Python API\.\.\."
+\# Menggunakan double quotes untuk string utama agar single quotes aman di dalam Python
+\# Membaca EXPERIMENT\_NAME\_FOR\_PYTHON dari environment variable di dalam skrip Python
+LATEST\_RUN\_ID\=</span>(python -c "
 import mlflow
 import os
-# Set tracking URI di dalam skrip Python juga, untuk memastikan konsistensi
-# Meskipun sudah diset sebagai env var, ini membuatnya lebih eksplisit.
-mlflow.set_tracking_uri(os.environ.get('MLFLOW_TRACKING_URI'))
-experiment_name = '$EXPERIMENT_NAME_CI'
-experiment = mlflow.get_experiment_by_name(experiment_name)
-if experiment is None:
-    print(f'Error: Experiment {experiment_name} not found via API.')
-    # Coba list semua eksperimen untuk debugging
-    # print('Available experiments:')
-    # for exp in mlflow.search_experiments():
-    #    print(f'- {exp.name} (ID: {exp.experiment_id})')
+
+# MLFLOW_TRACKING_URI dan EXPERIMENT_NAME_FOR_PYTHON sudah diset sebagai env var untuk langkah ini
+# dan akan diakses oleh os.environ.get()
+
+# Pastikan tracking URI diset jika belum di-inherit dengan benar
+tracking_uri = os.environ.get('MLFLOW_TRACKING_URI')
+if tracking_uri:
+    mlflow.set_tracking_uri(tracking_uri)
+else:
+    print('Error: MLFLOW_TRACKING_URI environment variable not set for Python script.')
     exit(1)
-experiment_id = experiment.experiment_id
-runs = mlflow.search_runs(experiment_ids=[experiment_id], order_by=['attributes.start_time DESC'], max_results=1)
-if runs.empty:
-    print(f'Error: No runs found in experiment {experiment_name} (ID: {experiment_id}).')
+
+experiment_name_py = os.environ.get('EXPERIMENT_NAME_FOR_PYTHON')
+if not experiment_name_py:
+    print('Error: EXPERIMENT_NAME_FOR_PYTHON environment variable not set for Python script.')
     exit(1)
-print(runs.iloc[0].run_id)
+
+try:
+    experiment = mlflow.get_experiment_by_name(experiment_name_py)
+    if experiment is None:
+        print(f'Error: Experiment \"{experiment_name_py}\" not found via API.')
+        # print('Available experiments:')
+        # for exp in mlflow.search_experiments(): # search_experiments mungkin perlu tracking URI di-set
+        #    print(f'- \"{exp.name}\" (ID: \"{exp.experiment_id}\")')
+        exit(1)
+    experiment_id = experiment.experiment_id
+    
+    runs_df = mlflow.search_runs(experiment_ids=[experiment_id], order_by=['attributes.start_time DESC'], max_results=1)
+    
+    if runs_df.empty:
+        print(f'Error: No runs found in experiment \"{experiment_name_py}\" (ID: \"{experiment_id}\").')
+        exit(1)
+    
+    # Mengakses run_id dari DataFrame yang dikembalikan oleh search_runs
+    # Nama kolom default untuk run ID adalah 'run_id'
+    print(runs_df.iloc[0]['run_id'])
+
+except Exception as e:
+    print(f'Python script error: {e}')
+    exit(1)
 ")
         
         if [ -z "$LATEST_RUN_ID" ] || [ "$LATEST_RUN_ID" == "null" ]; then
           echo "Error: Could not find latest Run ID using Python API."
+          # Tambahkan output dari LATEST_RUN_ID untuk melihat apa isinya jika error
+          echo "LATEST_RUN_ID_content: $LATEST_RUN_ID"
           exit 1
         fi
         echo "Latest Run ID is: $LATEST_RUN_ID"
@@ -112,13 +134,12 @@ print(runs.iloc[0].run_id)
       uses: docker/login-action@v3
       with:
         username: ${{ secrets.DOCKERHUB_USERNAME }}
-        password: ${{ secrets.DOCKERHUB_TOKEN }}
-
-    - name: Build and Push Docker image using MLflow
-      if: success()
-      env:
-        GIT_PYTHON_GIT_EXECUTABLE: /usr/bin/git
-        # MLFLOW_TRACKING_URI akan diset lagi di sini untuk build-docker
+        password: <span class="math-inline">\{\{ secrets\.DOCKERHUB\_TOKEN \}\}
+\- name\: Build and Push Docker image using MLflow
+if\: success\(\)
+env\:
+GIT\_PYTHON\_GIT\_EXECUTABLE\: /usr/bin/git
+MLFLOW\_TRACKING\_URI\: "file\://</span>{{ github.workspace }}/MLProject_training/mlruns" # Menggunakan GITHUB_WORKSPACE
       run: |
         RUN_ID="${{ steps.mlflow_run_step.outputs.run_id }}"
         if [ -z "$RUN_ID" ]; then
@@ -128,14 +149,13 @@ print(runs.iloc[0].run_id)
         echo "Using Run ID: $RUN_ID untuk membangun Docker image."
         
         MODEL_ARTIFACT_PATH="best-randomforest-model" 
-        MODEL_URI="runs:/$RUN_ID/$MODEL_ARTIFACT_PATH"
-        IMAGE_NAME="${{ secrets.DOCKERHUB_USERNAME }}/bitcoin-price-predictor:latest" 
+        MODEL_URI="runs:/$RUN_ID/<span class="math-inline">MODEL\_ARTIFACT\_PATH"
+IMAGE\_NAME\="</span>{{ secrets.DOCKERHUB_USERNAME }}/bitcoin-price-predictor:latest" 
         
         echo "Model URI: $MODEL_URI"
         echo "Image Name: $IMAGE_NAME"
 
-        # Set MLFLOW_TRACKING_URI agar mlflow models tahu di mana mencari run lokal
-        export MLFLOW_TRACKING_URI="file://$(pwd)/MLProject_training/mlruns"
+        # MLFLOW_TRACKING_URI sudah diset sebagai env var untuk langkah ini
         echo "MLFLOW_TRACKING_URI for build-docker is set to: $MLFLOW_TRACKING_URI"
         
         python -m mlflow models build-docker \
@@ -151,5 +171,5 @@ print(runs.iloc[0].run_id)
       uses: actions/upload-artifact@v4
       with:
         name: mlflow-run-artifacts
-        path: MLProject_training/mlruns/
+        path: MLProject_training/mlruns/ # Path relatif dari GITHUB_WORKSPACE
         retention-days: 7
