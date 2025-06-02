@@ -33,9 +33,9 @@ jobs:
       uses: conda-incubator/setup-miniconda@v3
       with:
         auto-update-conda: true
-        python-version: '3.9' # Versi Python untuk base env Miniconda
+        python-version: '3.9'
         channels: conda-forge,defaults
-        auto-activate-base: true # Default, memastikan base env aktif
+        auto-activate-base: true
         use-mamba: false
 
     - name: Install MLflow and GitPython in Conda base
@@ -47,21 +47,20 @@ jobs:
         conda info --envs
         echo "Which python: $(which python)"
         python --version
-        echo "Which pip: $(which pip)"
-        pip --version
-        echo "Installing MLflow (specific version) and GitPython using pip from active Conda env..."
-        python -m pip install "mlflow>=2.0.0,<3.0.0" GitPython
-        echo "Verifying MLflow version (running as module)..."
-        python -m mlflow --version
-        echo "Verifying GitPython version..."
-        python -c "import git; print(f'GitPython version: {git.__version__}')"
-
-    - name: Run MLflow Project and Capture Run ID
-      id: mlflow_run_step
-      env:
-        GIT_PYTHON_GIT_EXECUTABLE: /usr/bin/git
-        MLFLOW_TRACKING_URI: "file://${{ github.workspace }}/MLProject_training/mlruns"
-        EXPERIMENT_NAME_FOR_PYTHON: "CI Bitcoin Price Prediction"
+        echo "Which pip: <span class="math-inline">\(which pip\)"
+pip \-\-version
+echo "Installing MLflow \(specific version\) and GitPython using pip from active Conda env\.\.\."
+python \-m pip install "mlflow\>\=2\.0\.0,<3\.0\.0" GitPython
+echo "Verifying MLflow version \(running as module\)\.\.\."
+python \-m mlflow \-\-version
+echo "Verifying GitPython version\.\.\."
+python \-c "import git; print\(f'GitPython version\: \{git\.\_\_version\_\_\}'\)"
+\- name\: Run MLflow Project and Capture Run ID
+id\: mlflow\_run\_step
+env\:
+GIT\_PYTHON\_GIT\_EXECUTABLE\: /usr/bin/git
+MLFLOW\_TRACKING\_URI\: "file\://</span>{{ github.workspace }}/MLProject_training/mlruns"
+        EXPERIMENT_NAME_FOR_PYTHON: "CI Bitcoin Price Prediction" 
       run: |
         echo "--- Verifying Environment for MLflow Run ---"
         echo "Current PATH: $PATH"
@@ -71,48 +70,62 @@ jobs:
         echo "Running MLflow project for experiment: $EXPERIMENT_NAME_FOR_PYTHON"
         echo "MLFLOW_TRACKING_URI for run: $MLFLOW_TRACKING_URI"
         
-        python -m mlflow run MLProject_training/ --experiment-name "$EXPERIMENT_NAME_FOR_PYTHON"
-        
-        echo "Fetching latest Run ID using Python API..."
-        LATEST_RUN_ID=$(python -c "
+        python -m mlflow run MLProject_training/ --experiment-name "<span class="math-inline">EXPERIMENT\_NAME\_FOR\_PYTHON"
+echo "Fetching latest Run ID using Python API\.\.\."
+\# Pastikan semua baris skrip Python di bawah ini diindentasi dengan benar
+\# relatif terhadap awal string setelah python \-c "
+\# Tidak boleh ada indentasi YAML yang salah di sini\.
+LATEST\_RUN\_ID\=</span>(python -c "
 import mlflow
 import os
 
-tracking_uri = os.environ.get('MLFLOW_TRACKING_URI')
-if tracking_uri:
-    mlflow.set_tracking_uri(tracking_uri)
+# Baris ini dan selanjutnya adalah kode Python, bukan YAML.
+# Indentasi Python standar berlaku di sini.
+
+tracking_uri_py = os.environ.get('MLFLOW_TRACKING_URI')
+if tracking_uri_py:
+    mlflow.set_tracking_uri(tracking_uri_py)
+    print(f'Python script: MLFLOW_TRACKING_URI set to {tracking_uri_py}')
 else:
-    print('Error: MLFLOW_TRACKING_URI environment variable not set for Python script.')
+    print('Python script Error: MLFLOW_TRACKING_URI environment variable not found.')
     exit(1)
 
 experiment_name_py = os.environ.get('EXPERIMENT_NAME_FOR_PYTHON')
 if not experiment_name_py:
-    print('Error: EXPERIMENT_NAME_FOR_PYTHON environment variable not set for Python script.')
+    print('Python script Error: EXPERIMENT_NAME_FOR_PYTHON environment variable not found.')
     exit(1)
+print(f'Python script: Searching for experiment named \"{experiment_name_py}\"')
 
 try:
     experiment = mlflow.get_experiment_by_name(experiment_name_py)
     if experiment is None:
-        print(f'Error: Experiment \"{experiment_name_py}\" not found via API.')
+        print(f'Python script Error: Experiment \"{experiment_name_py}\" not found via API.')
+        # Untuk debugging, list semua eksperimen jika tidak ditemukan:
+        # print('Python script: Available experiments:')
+        # for exp_obj in mlflow.search_experiments():
+        #     print(f'- Name: \"{exp_obj.name}\", ID: \"{exp_obj.experiment_id}\"')
         exit(1)
     experiment_id = experiment.experiment_id
+    print(f'Python script: Found Experiment ID: {experiment_id}')
     
     runs_df = mlflow.search_runs(experiment_ids=[experiment_id], order_by=['attributes.start_time DESC'], max_results=1)
     
     if runs_df.empty:
-        print(f'Error: No runs found in experiment \"{experiment_name_py}\" (ID: \"{experiment_id}\").')
+        print(f'Python script Error: No runs found in experiment \"{experiment_name_py}\" (ID: \"{experiment_id}\").')
         exit(1)
     
-    print(runs_df.iloc[0]['run_id'])
+    # Mengakses run_id dari DataFrame
+    latest_run_id_py = runs_df.iloc[0]['run_id']
+    print(latest_run_id_py) # Ini akan ditangkap oleh LATEST_RUN_ID di bash
 
 except Exception as e:
-    print(f'Python script error: {e}')
+    print(f'Python script execution error: {e}')
     exit(1)
 ")
         
         if [ -z "$LATEST_RUN_ID" ] || [ "$LATEST_RUN_ID" == "null" ]; then
-          echo "Error: Could not find latest Run ID using Python API."
-          echo "LATEST_RUN_ID_content: $LATEST_RUN_ID" # Debugging output
+          echo "Bash script Error: Could not find latest Run ID using Python API."
+          echo "Bash script LATEST_RUN_ID_content: [$LATEST_RUN_ID]" # Debugging output
           exit 1
         fi
         echo "Latest Run ID is: $LATEST_RUN_ID"
@@ -123,13 +136,12 @@ except Exception as e:
       uses: docker/login-action@v3
       with:
         username: ${{ secrets.DOCKERHUB_USERNAME }}
-        password: ${{ secrets.DOCKERHUB_TOKEN }}
-
-    - name: Build and Push Docker image using MLflow
-      if: success()
-      env:
-        GIT_PYTHON_GIT_EXECUTABLE: /usr/bin/git
-        MLFLOW_TRACKING_URI: "file://${{ github.workspace }}/MLProject_training/mlruns"
+        password: <span class="math-inline">\{\{ secrets\.DOCKERHUB\_TOKEN \}\}
+\- name\: Build and Push Docker image using MLflow
+if\: success\(\)
+env\:
+GIT\_PYTHON\_GIT\_EXECUTABLE\: /usr/bin/git
+MLFLOW\_TRACKING\_URI\: "file\://</span>{{ github.workspace }}/MLProject_training/mlruns"
       run: |
         RUN_ID="${{ steps.mlflow_run_step.outputs.run_id }}"
         if [ -z "$RUN_ID" ]; then
@@ -139,8 +151,8 @@ except Exception as e:
         echo "Using Run ID: $RUN_ID untuk membangun Docker image."
         
         MODEL_ARTIFACT_PATH="best-randomforest-model" 
-        MODEL_URI="runs:/$RUN_ID/$MODEL_ARTIFACT_PATH"
-        IMAGE_NAME="${{ secrets.DOCKERHUB_USERNAME }}/bitcoin-price-predictor:latest" 
+        MODEL_URI="runs:/$RUN_ID/<span class="math-inline">MODEL\_ARTIFACT\_PATH"
+IMAGE\_NAME\="</span>{{ secrets.DOCKERHUB_USERNAME }}/bitcoin-price-predictor:latest" 
         
         echo "Model URI: $MODEL_URI"
         echo "Image Name: $IMAGE_NAME"
