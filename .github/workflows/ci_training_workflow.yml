@@ -11,15 +11,17 @@ jobs:
   train-model:
     runs-on: ubuntu-latest
 
-    defaults: # Menetapkan direktori kerja default untuk semua langkah
+    defaults:
       run:
-        working-directory: ${{ github.workspace }} # Biasanya ini root repo Anda
+        # Menggunakan shell bash dan memastikan login environment (-l) untuk memuat profil
+        # yang mungkin mengatur PATH dengan benar.
+        shell: bash -el {0}
 
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
 
-    - name: Set up Python # Untuk MLflow CLI di base atau jika diperlukan sebelum Conda
+    - name: Set up Python (untuk runner jika diperlukan sebelum Conda)
       uses: actions/setup-python@v4
       with:
         python-version: '3.9' # Versi Python yang umum
@@ -29,45 +31,46 @@ jobs:
       with:
         auto-update-conda: true
         python-version: '3.9' # Sesuaikan dengan versi Python di conda.yaml Anda
-        # environment-file: MLProject_training/conda.yaml # Kita akan biarkan mlflow run yang handle ini
-        # activate-environment: bitcoin_price_prediction_env # Tidak perlu diaktifkan di sini
-        # Jika activate-environment di-set, pastikan nama env ada di conda.yaml
         # Biarkan mlflow run yang membuat/mengaktifkan environment dari conda.yaml di dalam MLProject
         channels: conda-forge,defaults # Pastikan channel ini sesuai dengan conda.yaml Anda
-        use-mamba: false # Set ke true jika ingin menggunakan Mamba dan dependensi mendukung
+        use-mamba: false
 
-    - name: Install MLflow CLI (di base environment Conda)
-      shell: bash -el {0} # Memastikan conda ada di path untuk shell ini
+    - name: Install MLflow CLI (di base environment Conda yang dibuat setup-miniconda)
       run: |
         # $CONDA adalah path ke instalasi miniconda yang dibuat oleh setup-miniconda
         echo "CONDA executable is at: $CONDA/bin/conda"
-        $CONDA/bin/pip install mlflow # Menginstal mlflow di base env dari miniconda
-        echo "MLflow version:"
+        echo "Installing MLflow in $CONDA/bin..."
+        $CONDA/bin/pip install mlflow
+        echo "MLflow version in Conda base:"
         $CONDA/bin/mlflow --version
 
     - name: Run MLflow Project
-      shell: bash -el {0} # Memastikan conda dan mlflow dari base env ada di path
       env:
-        # MLFLOW_CONDA_HOME: $CONDA # setup-miniconda biasanya sudah mengatur ini, atau MLflow mendeteksinya
-        # CONDA_EXE: $CONDA/bin/conda # Bisa juga diset eksplisit jika perlu
-        # Menambahkan path bin dari Conda ke PATH untuk sesi run ini
+        # Menambahkan path bin dari Conda ke PATH yang sudah ada di runner
+        # Ini penting agar mlflow dan python dari Conda base ditemukan
         PATH: ${{ env.CONDA }}/bin:${{ env.PATH }}
       run: |
-        echo "Verifying mlflow in PATH..."
-        which mlflow # Seharusnya menunjuk ke $CONDA/bin/mlflow
-        mlflow --version
-
+        echo "--- Verifying Environment ---"
+        echo "Current PATH: $PATH"
+        echo "CONDA env variable: $CONDA"
+        
+        echo "Verifying conda command..."
+        conda --version # Seharusnya berhasil
+        
+        echo "Verifying mlflow command (from Conda base)..."
+        mlflow --version # Seharusnya berhasil
+        
         echo "Running MLflow project..."
         # Menjalankan mlflow run dari root repository, menunjuk ke folder MLProject
         # MLflow akan membaca MLproject di dalam MLProject_training/
-        # dan menggunakan conda.yaml di dalam MLProject_training/ untuk membuat environment baru (mlflow-xxxx)
+        # dan menggunakan conda.yaml di dalam MLProject_training/ untuk membuat/menggunakan environment proyek (mlflow-xxxx)
         mlflow run MLProject_training/ --experiment-name "CI Bitcoin Price Prediction"
 
     - name: Upload MLflow run artifacts
-      if: always()
+      if: always() # Selalu jalankan langkah ini, bahkan jika langkah sebelumnya gagal
       uses: actions/upload-artifact@v4
       with:
         name: mlflow-run-artifacts
-        path: | # Path relatif dari root repository
-          MLProject_training/mlruns/
+        # Path relatif dari root repository (GITHUB_WORKSPACE)
+        path: MLProject_training/mlruns/
         retention-days: 7
