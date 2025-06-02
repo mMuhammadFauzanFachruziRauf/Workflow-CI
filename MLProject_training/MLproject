@@ -1,0 +1,10 @@
+name: BitcoinPricePredictionCI
+
+# Lingkungan Conda untuk proyek ini
+conda_env: conda.yaml
+
+# Titik masuk (entry points) untuk menjalankan proyek
+entry_points:
+  main:
+    # Perintah yang akan dijalankan. Kita bisa menambahkan parameter di sini jika perlu.
+    command: "python modelling.py"

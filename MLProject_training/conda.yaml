@@ -1,0 +1,17 @@
+name: bitcoin_price_prediction_env # Nama environment Conda
+channels:
+  - defaults
+  - conda-forge # Channel tambahan jika ada paket yang tidak ada di defaults
+dependencies:
+  - python=3.9 # Versi Python yang Anda gunakan
+  - pip
+  - mlflow >=1.0 # Pastikan versi MLflow cukup
+  - scikit-learn
+  - pandas
+  - numpy
+  - requests # Jika modelling.py Anda masih mengambil data (sebaiknya tidak, gunakan data yg sudah ada)
+  # Tambahkan library lain yang dibutuhkan oleh modelling.py
+  # Misalnya, jika modelling.py Anda masih mengambil data dengan 'requests'
+# Anda juga bisa menambahkan dependensi pip jika ada paket yang tidak tersedia di Conda
+# - pip:
+#   - nama-paket-pip

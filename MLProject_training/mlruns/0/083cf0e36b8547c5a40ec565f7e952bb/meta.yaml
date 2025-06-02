@@ -1,0 +1,15 @@
+artifact_uri: file:///E:/UPSKILL/dicoding/ProyekDicoding/Workflow-CI/MLProject_training/mlruns/0/083cf0e36b8547c5a40ec565f7e952bb/artifacts
+end_time: 1748875292842
+entry_point_name: ''
+experiment_id: '0'
+lifecycle_stage: active
+run_id: 083cf0e36b8547c5a40ec565f7e952bb
+run_name: secretive-squid-58
+run_uuid: 083cf0e36b8547c5a40ec565f7e952bb
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1748875236962
+status: 4
+tags: []
+user_id: Fauzan

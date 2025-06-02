@@ -1,0 +1,15 @@
+artifact_uri: file:///E:/UPSKILL/dicoding/ProyekDicoding/Workflow-CI/MLProject_training/mlruns/0/4914008085fd4b38b04bb256f9a8932b/artifacts
+end_time: 1748875731869
+entry_point_name: ''
+experiment_id: '0'
+lifecycle_stage: active
+run_id: 4914008085fd4b38b04bb256f9a8932b
+run_name: calm-frog-318
+run_uuid: 4914008085fd4b38b04bb256f9a8932b
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1748875658058
+status: 3
+tags: []
+user_id: Fauzan
