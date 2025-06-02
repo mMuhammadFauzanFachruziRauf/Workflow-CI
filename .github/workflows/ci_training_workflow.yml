@@ -74,48 +74,51 @@ jobs:
         python -m mlflow run MLProject_training/ --experiment-name "$EXPERIMENT_NAME_FOR_PYTHON"
         
         echo "Fetching latest Run ID using Python API..."
-        # Pastikan skrip Python di bawah ini dimulai pada baris baru setelah -c "
-        # dan semua indentasi Python di dalamnya konsisten.
-        LATEST_RUN_ID=$(python -c "
+        # PERUBAHAN DI SINI: Pastikan skrip Python multiline diformat dengan benar untuk YAML
+        # Kita akan menggunakan > untuk folded style, dan memastikan indentasi Python benar.
+        # Atau, kita bisa tetap dengan | dan memastikan baris pertama Python tidak ada indentasi YAML.
+        LATEST_RUN_ID=$(python -c '
 import mlflow
 import os
 
 # Kode Python dimulai di sini. Indentasi Python standar.
-tracking_uri_py = os.environ.get('MLFLOW_TRACKING_URI')
+# Tidak ada indentasi YAML tambahan pada baris 'import mlflow' ini.
+
+tracking_uri_py = os.environ.get("MLFLOW_TRACKING_URI") # Menggunakan kutip ganda untuk string Python
 if tracking_uri_py:
     mlflow.set_tracking_uri(tracking_uri_py)
-    print(f'Python script: MLFLOW_TRACKING_URI set to {tracking_uri_py}')
+    print(f"Python script: MLFLOW_TRACKING_URI set to {tracking_uri_py}")
 else:
-    print('Python script Error: MLFLOW_TRACKING_URI environment variable not found.')
+    print("Python script Error: MLFLOW_TRACKING_URI environment variable not found.")
     exit(1)
 
-experiment_name_py = os.environ.get('EXPERIMENT_NAME_FOR_PYTHON')
+experiment_name_py = os.environ.get("EXPERIMENT_NAME_FOR_PYTHON") # Menggunakan kutip ganda
 if not experiment_name_py:
-    print('Python script Error: EXPERIMENT_NAME_FOR_PYTHON environment variable not found.')
+    print("Python script Error: EXPERIMENT_NAME_FOR_PYTHON environment variable not found.")
     exit(1)
-print(f'Python script: Searching for experiment named \"{experiment_name_py}\"')
+print(f"Python script: Searching for experiment named \"{experiment_name_py}\"")
 
 try:
     experiment = mlflow.get_experiment_by_name(experiment_name_py)
     if experiment is None:
-        print(f'Python script Error: Experiment \"{experiment_name_py}\" not found via API.')
+        print(f"Python script Error: Experiment \"{experiment_name_py}\" not found via API.")
         exit(1)
     experiment_id = experiment.experiment_id
-    print(f'Python script: Found Experiment ID: {experiment_id}')
+    print(f"Python script: Found Experiment ID: {experiment_id}")
     
-    runs_df = mlflow.search_runs(experiment_ids=[experiment_id], order_by=['attributes.start_time DESC'], max_results=1)
+    runs_df = mlflow.search_runs(experiment_ids=[experiment_id], order_by=["attributes.start_time DESC"], max_results=1) # kutip ganda untuk list
     
     if runs_df.empty:
-        print(f'Python script Error: No runs found in experiment \"{experiment_name_py}\" (ID: \"{experiment_id}\").')
+        print(f"Python script Error: No runs found in experiment \"{experiment_name_py}\" (ID: \"{experiment_id}\").")
         exit(1)
     
-    latest_run_id_py = runs_df.iloc[0]['run_id']
-    print(latest_run_id_py) # Ini akan ditangkap oleh LATEST_RUN_ID di bash
+    latest_run_id_py = runs_df.iloc[0]["run_id"] # kutip ganda untuk akses kolom
+    print(latest_run_id_py)
 
 except Exception as e:
-    print(f'Python script execution error: {e}')
+    print(f"Python script execution error: {e}")
     exit(1)
-")
+') # Akhir dari python -c '...'
         
         if [ -z "$LATEST_RUN_ID" ] || [ "$LATEST_RUN_ID" == "null" ]; then
           echo "Bash script Error: Could not find latest Run ID using Python API."
@@ -125,6 +128,7 @@ except Exception as e:
         echo "Latest Run ID is: $LATEST_RUN_ID"
         echo "run_id=$LATEST_RUN_ID" >> $GITHUB_OUTPUT
 
+    # ... (sisa workflow YAML tetap sama seperti sebelumnya) ...
     - name: Log in to Docker Hub
       if: success()
       uses: docker/login-action@v3
